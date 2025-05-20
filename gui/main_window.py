@@ -12,12 +12,12 @@ from data_loader import DataLoader
 from data_processor import DataProcessor
 from data_visualizer import DataVisualizer
 
-from .tabs.data_previews import DataPreviewTab
-from .tabs.stats_tab import StatsTab
-from .tabs.correlation_tab import CorrelationTab
-from .tabs.visualization_tab import VisualizationTab
-from .tabs.data_processing_tab import DataProcessingTab
-from .tabs.classification_tab import ClassificationTab
+from gui.tabs.data_previews import DataPreviewTab
+from gui.tabs.stats_tab import StatsTab
+from gui.tabs.correlation_tab import CorrelationTab
+from gui.tabs.visualization_tab import VisualizationTab
+from gui.tabs.data_processing_tab import DataProcessingTab
+from gui.tabs.classification_tab import ClassificationTab
 
 
 class MainWindow(QMainWindow):
@@ -162,55 +162,64 @@ class MainWindow(QMainWindow):
 
     def load_data_from_csv(self):
         """Wczytywanie danych z pliku CSV."""
-        file_dialog = QFileDialog()
-        file_path, _ = file_dialog.getOpenFileName(
-            self, "Wczytaj plik CSV", "", "Pliki CSV (*.csv);;Wszystkie pliki (*.*)"
-        )
+        try:
+            file_dialog = QFileDialog()
+            file_path, _ = file_dialog.getOpenFileName(
+                self, "Wczytaj plik CSV", "", "Pliki CSV (*.csv);;Wszystkie pliki (*.*)"
+            )
 
-        if file_path:
-            # Okno dialogowe do wyboru separatora
-            separator_dialog = QDialog(self)
-            separator_dialog.setWindowTitle("Wybierz separator")
-            separator_layout = QVBoxLayout(separator_dialog)
+            if file_path:
+                # Okno dialogowe do wyboru separatora
+                separator_dialog = QDialog(self)
+                separator_dialog.setWindowTitle("Wybierz separator")
+                separator_layout = QVBoxLayout(separator_dialog)
 
-            separator_combo = QComboBox()
-            separator_combo.addItems([";", ",", "\t", "|", " "])
+                separator_combo = QComboBox()
+                separator_combo.addItems([";", ",", "\t", "|", " "])
 
-            separator_layout.addWidget(QLabel("Wybierz separator:"))
-            separator_layout.addWidget(separator_combo)
+                separator_layout.addWidget(QLabel("Wybierz separator:"))
+                separator_layout.addWidget(separator_combo)
 
-            buttons_layout = QHBoxLayout()
-            ok_button = QPushButton("OK")
-            ok_button.clicked.connect(separator_dialog.accept)
-            cancel_button = QPushButton("Anuluj")
-            cancel_button.clicked.connect(separator_dialog.reject)
+                buttons_layout = QHBoxLayout()
+                ok_button = QPushButton("OK")
+                ok_button.clicked.connect(separator_dialog.accept)
+                cancel_button = QPushButton("Anuluj")
+                cancel_button.clicked.connect(separator_dialog.reject)
 
-            buttons_layout.addWidget(ok_button)
-            buttons_layout.addWidget(cancel_button)
+                buttons_layout.addWidget(ok_button)
+                buttons_layout.addWidget(cancel_button)
 
-            separator_layout.addLayout(buttons_layout)
+                separator_layout.addLayout(buttons_layout)
 
-            result = separator_dialog.exec_()
+                result = separator_dialog.exec_()
 
-            if result == QDialog.Accepted:
-                delimiter = separator_combo.currentText()
+                if result == QDialog.Accepted:
+                    delimiter = separator_combo.currentText()
 
-                # Wczytywanie danych
-                success = self.data_loader.load_data(file_path, delimiter=delimiter)
+                    # Wczytywanie danych
+                    success = self.data_loader.load_data(file_path, delimiter=delimiter)
 
-                if success:
-                    self.statusBar.showMessage(f"Wczytano dane z pliku {os.path.basename(file_path)}")
+                    if success:
+                        self.statusBar.showMessage(f"Wczytano dane z pliku {os.path.basename(file_path)}")
 
-                    # Aktualizacja danych w data_processor i data_visualizer
-                    self.data_processor.set_data(self.data_loader.get_data())
-                    self.data_visualizer.set_data(self.data_loader.get_data())
+                        # Aktualizacja danych w data_processor i data_visualizer
+                        self.data_processor.set_data(self.data_loader.get_data())
+                        self.data_visualizer.set_data(self.data_loader.get_data())
 
-                    # Aktualizacja interfejsu
-                    self.update_ui_after_data_load()
-                else:
-                    QMessageBox.warning(
-                        self, "Błąd", "Nie udało się wczytać danych z pliku."
-                    )
+                        # Aktualizacja interfejsu
+                        self.update_ui_after_data_load()
+                    else:
+                        QMessageBox.warning(
+                            self, "Błąd", "Nie udało się wczytać danych z pliku."
+                        )
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                "Błąd krytyczny",
+                f"Wystąpił błąd podczas wczytywania pliku: {str(e)}\n\n{traceback.format_exc()}"
+            )
 
     def save_data_to_csv(self):
         """Zapisywanie przetworzonych danych do pliku CSV."""
@@ -288,13 +297,22 @@ class MainWindow(QMainWindow):
 
     def update_ui_after_data_load(self):
         """Aktualizacja interfejsu po wczytaniu danych."""
-        # Aktualizacja wszystkich zakładek
-        self.data_preview_tab.update_data(self.data_loader)
-        self.stats_tab.update_columns(self.data_loader.get_column_names())
-        self.correlation_tab.update_data()
-        self.visualization_tab.update_columns(self.data_loader.get_column_names())
-        self.data_processing_tab.update_columns(self.data_loader.get_column_names())
-        self.classification_tab.update_columns(self.data_loader.get_column_names())
+        try:
+            # Aktualizacja wszystkich zakładek
+            self.data_preview_tab.update_data(self.data_loader)
+            self.stats_tab.update_columns(self.data_loader.get_column_names())
+            self.correlation_tab.update_data()
+            self.visualization_tab.update_columns(self.data_loader.get_column_names())
+            self.data_processing_tab.update_columns(self.data_loader.get_column_names())
+            self.classification_tab.update_columns(self.data_loader.get_column_names())
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(
+                self,
+                "Błąd aktualizacji",
+                f"Wystąpił błąd podczas aktualizacji interfejsu: {str(e)}\n\n{traceback.format_exc()}"
+            )
 
     def show_about_dialog(self):
         """Wyświetlanie okna dialogowego 'O programie'."""

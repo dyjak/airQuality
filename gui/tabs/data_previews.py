@@ -74,7 +74,12 @@ class DataPreviewTab(QWidget):
         self.data_info_text.append(f"Liczba wierszy: {shape[0]}")
         self.data_info_text.append(f"Liczba kolumn: {shape[1]}")
         self.data_info_text.append("\nInformacje o danych:")
-        self.data_info_text.append(info)
+
+        if isinstance(info, list):
+            for line in info:
+                self.data_info_text.append(str(line))
+        else:
+            self.data_info_text.append(str(info))
 
     def _update_data_table(self, data_loader):
         """

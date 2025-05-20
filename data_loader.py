@@ -29,7 +29,9 @@ class DataLoader:
         """
         try:
             self.file_path = file_path
-            self.data = pd.read_csv(file_path, delimiter=delimiter, encoding=encoding)
+
+            # Dodanie parametru decimal=',' do obsługi europejskiego formatu liczb
+            self.data = pd.read_csv(file_path, delimiter=delimiter, encoding=encoding, decimal=',')
 
             # Zastępowanie wartości -200 (brakujące wartości) na NaN
             self.data.replace(-200, np.nan, inplace=True)
@@ -38,7 +40,6 @@ class DataLoader:
         except Exception as e:
             print(f"Błąd podczas wczytywania danych: {e}")
             return False
-
     def get_data(self):
         """
         Zwraca wczytane dane.
@@ -89,9 +90,11 @@ class DataLoader:
             str: Informacje o danych.
         """
         if self.data is not None:
-            info_buffer = []
-            self.data.info(buf=info_buffer)
-            return ''.join(info_buffer)
+            # Użyj StringIO zamiast listy
+            import io
+            buffer = io.StringIO()
+            self.data.info(buf=buffer)
+            return buffer.getvalue()
         return "Brak wczytanych danych."
 
     def get_data_head(self, n=5):
