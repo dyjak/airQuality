@@ -209,19 +209,16 @@ def scale_data(data, column_names, method='minmax'):
     co zwraca:
     - dane z przeskalowanymi kolumnami
     """
+    print("=== DEBUG SKALOWANIA ===")
+    print(f"Metoda: {method}")
+    print(f"Kolumny do skalowania: {column_names}")
 
     if data is None:
-        print("brak danych do skalowania")
+        print("BŁĄD: brak danych do skalowania")
         return None
 
-    # sprawdzamy czy wszystkie kolumny istnieja i sa liczbowe
-    for column in column_names:
-        if column not in data.columns:
-            print(f"nie ma kolumny {column}")
-            return None
-        if not np.issubdtype(data[column].dtype, np.number):
-            print(f"kolumna {column} nie zawiera liczb")
-            return None
+    print(f"Rozmiar danych wejściowych: {data.shape}")
+    print(f"Dostępne kolumny: {list(data.columns)}")
 
     try:
         new_data = data.copy()
@@ -229,37 +226,67 @@ def scale_data(data, column_names, method='minmax'):
         # Sprawdzamy i przygotowujemy dane do skalowania
         columns_to_scale = []
         for column in column_names:
+            print(f"\n--- Sprawdzanie kolumny: {column} ---")
+
             if column not in data.columns:
-                print(f"nie ma kolumny {column}")
+                print(f"BŁĄD: nie ma kolumny {column}")
                 continue
+
+            print(f"Typ danych w kolumnie: {data[column].dtype}")
+            print(f"Pierwsze 5 wartości: {data[column].head().tolist()}")
+            print(f"Liczba braków: {data[column].isna().sum()}")
 
             # Próbujemy przekonwertować na liczby
             try:
                 numeric_series = pd.to_numeric(data[column], errors='coerce')
-                if not numeric_series.isna().all():
+                nan_count = numeric_series.isna().sum()
+                valid_count = len(numeric_series) - nan_count
+
+                print(f"Po konwersji na numeric: {valid_count} prawidłowych, {nan_count} NaN")
+
+                if valid_count > 0:
                     columns_to_scale.append(column)
+                    print(f"✓ Kolumna {column} dodana do skalowania")
                 else:
-                    print(f"kolumna {column} nie zawiera liczb")
-            except:
-                print(f"nie można przekonwertować kolumny {column}")
+                    print(f"✗ Kolumna {column} nie zawiera prawidłowych liczb")
+            except Exception as e:
+                print(f"✗ Błąd przy konwersji kolumny {column}: {e}")
+
+        print(f"\nKolumny do skalowania: {columns_to_scale}")
 
         if not columns_to_scale:
-            print("nie ma kolumn do skalowania")
+            print("BŁĄD: nie ma kolumn do skalowania")
             return None
 
         # Przygotowujemy dane - konwertujemy na liczby i usuwamy braki
+        print("\n--- Przygotowywanie danych ---")
         data_for_scaling = new_data[columns_to_scale].copy()
+
         for col in columns_to_scale:
+            before_conversion = data_for_scaling[col].dtype
             data_for_scaling[col] = pd.to_numeric(data_for_scaling[col], errors='coerce')
+            after_conversion = data_for_scaling[col].dtype
+            print(f"Kolumna {col}: {before_conversion} -> {after_conversion}")
+
+        print(f"Dane przed usunięciem braków: {len(data_for_scaling)} wierszy")
 
         # Wybieramy tylko wiersze bez braków w skalowanych kolumnach
         complete_rows = data_for_scaling.dropna()
+        print(f"Dane po usunięciu braków: {len(complete_rows)} wierszy")
 
         if len(complete_rows) == 0:
-            print("nie ma danych do skalowania po usunieciu brakow")
+            print("BŁĄD: nie ma danych do skalowania po usunieciu brakow")
             return None
 
+        print(f"Zakres wartości przed skalowaniem:")
+        for col in columns_to_scale:
+            min_val = complete_rows[col].min()
+            max_val = complete_rows[col].max()
+            mean_val = complete_rows[col].mean()
+            print(f"  {col}: min={min_val:.4f}, max={max_val:.4f}, mean={mean_val:.4f}")
+
         # Wybieramy metode skalowania
+        print(f"\n--- Skalowanie metodą {method} ---")
         if method == 'minmax':
             scaler = MinMaxScaler()
             description = "0-1"
@@ -267,25 +294,47 @@ def scale_data(data, column_names, method='minmax'):
             scaler = StandardScaler()
             description = "srednia=0, odchylenie=1"
         else:
-            print(f"nieznana metoda skalowania: {method}")
+            print(f"BŁĄD: nieznana metoda skalowania: {method}")
             return None
 
         # Skalujemy dane
+        print("Wykonywanie skalowania...")
         scaled_values = scaler.fit_transform(complete_rows)
+        print(f"Przeskalowane dane - kształt: {scaled_values.shape}")
+
+        print(f"Zakres wartości po skalowaniu:")
+        for i, col in enumerate(columns_to_scale):
+            min_val = scaled_values[:, i].min()
+            max_val = scaled_values[:, i].max()
+            mean_val = scaled_values[:, i].mean()
+            print(f"  {col}_scaled: min={min_val:.4f}, max={max_val:.4f}, mean={mean_val:.4f}")
 
         # Dodajemy przeskalowane kolumny do danych
+        print("\n--- Dodawanie nowych kolumn ---")
         for i, column in enumerate(columns_to_scale):
             new_column_name = f"{column}_scaled"
+            print(f"Tworzenie kolumny: {new_column_name}")
+
             # Tworzymy nową kolumnę wypełnioną NaN
             new_data[new_column_name] = np.nan
             # Wstawiamy przeskalowane wartości tam gdzie były oryginalne (bez braków)
             new_data.loc[complete_rows.index, new_column_name] = scaled_values[:, i]
 
+            # Sprawdzamy ile wartości zostało wstawionych
+            inserted_count = new_data[new_column_name].notna().sum()
+            print(f"  Wstawiono {inserted_count} wartości do kolumny {new_column_name}")
+
+        print(f"\nRozmiar danych wyjściowych: {new_data.shape}")
+        print(f"Nowe kolumny: {[col for col in new_data.columns if col.endswith('_scaled')]}")
+        print("=== KONIEC DEBUG SKALOWANIA ===")
+
         print(f"przeskalowano {len(columns_to_scale)} kolumn metoda {method} ({description})")
         return new_data
 
     except Exception as error:
-        print(f"nie udalo sie przeskalowac danych: {error}")
+        print(f"BŁĄD w skalowaniu: {error}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -329,7 +378,7 @@ def handle_missing_values(data, method='drop', fill_value=None, column_names=Non
                 missing_before = new_data[column].isnull().sum()
 
                 if method == 'value' and fill_value is not None:
-                    new_data[column].fillna(fill_value, inplace=True)
+                    new_data[column] = new_data[column].fillna(fill_value)
                     fill_method_desc = f"wartoscia {fill_value}"
 
                 elif np.issubdtype(new_data[column].dtype, np.number):
@@ -344,12 +393,12 @@ def handle_missing_values(data, method='drop', fill_value=None, column_names=Non
                         fill_val = new_data[column].mode().iloc[0] if not new_data[column].mode().empty else 0
                         fill_method_desc = f"moda ({fill_val})"
 
-                    new_data[column].fillna(fill_val, inplace=True)
+                    new_data[column] = new_data[column].fillna(fill_val)
                 else:
                     # dla tekstu - tylko moda ma sens
                     if len(new_data[column].mode()) > 0:
                         fill_val = new_data[column].mode().iloc[0]
-                        new_data[column].fillna(fill_val, inplace=True)
+                        new_data[column] = new_data[column].fillna(fill_val)
                         fill_method_desc = f"moda ({fill_val})"
                     else:
                         fill_method_desc = "nie udalo sie - brak mody"

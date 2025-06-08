@@ -330,6 +330,12 @@ class DataProcessingTab(QWidget):
         # Pobranie metody skalowania
         method = 'minmax' if self.scaling_method_combo.currentText() == "MinMax (0-1)" else 'standard'
 
+        print("=== DEBUG GUI SKALOWANIA ===")
+        print(f"Wybrane kolumny: {columns}")
+        print(f"Metoda: {method}")
+        print(f"Rozmiar danych: {self.current_data.shape}")
+        print("================================")
+
         try:
             # Import i użycie prostej funkcji z utils
             from utils.data_processor import scale_data
@@ -338,6 +344,8 @@ class DataProcessingTab(QWidget):
             scaled_data = scale_data(self.current_data, columns, method=method)
 
             if scaled_data is not None:
+                print("Skalowanie zakończone sukcesem")
+
                 # Aktualizacja danych
                 self.current_data = scaled_data
 
@@ -347,10 +355,13 @@ class DataProcessingTab(QWidget):
 
                 self.status_bar.showMessage(f"Przeskalowano dane w kolumnach: {', '.join(columns)}")
             else:
+                print("Skalowanie zwróciło None")
                 QMessageBox.warning(self, "Błąd", "Nie udało się przeskalować danych.")
 
         except Exception as error:
-            print(f"Błąd przy skalowaniu: {error}")
+            print(f"Błąd przy skalowaniu w GUI: {error}")
+            import traceback
+            traceback.print_exc()
             QMessageBox.critical(self, "Błąd", f"Wystąpił błąd: {str(error)}")
 
     def remove_duplicates(self):
