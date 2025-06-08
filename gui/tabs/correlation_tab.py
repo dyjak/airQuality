@@ -1,5 +1,6 @@
 """
 Moduł zawierający klasę zakładki korelacji.
+ZAKTUALIZOWANY - używa prostych funkcji z utils zamiast obiektów.
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
                              QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
@@ -13,20 +14,16 @@ from ..matplotlib_canvas import MatplotlibCanvas, NavigationToolbar
 class CorrelationTab(QWidget):
     """Zakładka korelacji."""
 
-    def __init__(self, data_processor, data_visualizer, status_bar):
+    def __init__(self, status_bar):
         """
         Inicjalizacja zakładki korelacji.
 
         Args:
-            data_processor (DataProcessor): Obiekt przetwarzający dane.
-            data_visualizer (DataVisualizer): Obiekt wizualizujący dane.
             status_bar (QStatusBar): Pasek stanu głównego okna.
         """
         super(CorrelationTab, self).__init__()
-
-        self.data_processor = data_processor
-        self.data_visualizer = data_visualizer
         self.status_bar = status_bar
+        self.current_data = None
 
         # Inicjalizacja interfejsu
         self.init_ui()
@@ -47,6 +44,10 @@ class CorrelationTab(QWidget):
         calculate_button = QPushButton("Oblicz korelacje")
         calculate_button.clicked.connect(self.calculate_correlation)
         method_layout.addWidget(calculate_button)
+
+        save_corr_button = QPushButton("Zapisz korelacje do CSV")
+        save_corr_button.clicked.connect(self.save_correlation)
+        method_layout.addWidget(save_corr_button)
 
         method_layout.addStretch()
 
@@ -76,35 +77,68 @@ class CorrelationTab(QWidget):
         heatmap_group.setLayout(heatmap_layout)
         layout.addWidget(heatmap_group)
 
-    def update_data(self):
-        """Aktualizacja danych po wczytaniu nowego zbioru."""
+    def update_data(self, data):
+        """
+        Aktualizacja danych po wczytaniu nowego zbioru.
+
+        Args:
+            data (pandas.DataFrame): Nowe dane do analizy.
+        """
+        self.current_data = data
+
         # Czyścimy tabelę i wykres
         self.correlation_table.setRowCount(0)
         self.correlation_table.setColumnCount(0)
         self.correlation_canvas.fig.clear()
         self.correlation_canvas.draw()
 
+        if data is not None:
+            print(f"CorrelationTab: zaktualizowano dane ({len(data)} wierszy, {len(data.columns)} kolumn)")
+
     def calculate_correlation(self):
         """Obliczanie macierzy korelacji."""
-        if self.data_processor.get_data() is None:
+        if self.current_data is None:
             QMessageBox.warning(
                 self, "Błąd", "Brak danych do analizy."
             )
             return
 
-        # Pobranie metody korelacji
-        method = self.correlation_method_combo.currentText()
+        try:
+            # Pobranie metody korelacji
+            method = self.correlation_method_combo.currentText()
 
-        # Obliczenie macierzy korelacji
-        corr_matrix = self.data_processor.calculate_correlation(method=method)
+            # Import i użycie prostej funkcji z utils
+            from utils.data_processor import calculate_correlation
+            corr_matrix = calculate_correlation(self.current_data, method=method)
 
-        if corr_matrix is None:
-            QMessageBox.warning(
-                self, "Błąd", "Nie udało się obliczyć macierzy korelacji."
+            if corr_matrix is None:
+                QMessageBox.warning(
+                    self, "Błąd", "Nie udało się obliczyć macierzy korelacji."
+                )
+                return
+
+            # Aktualizacja tabeli korelacji
+            self._update_correlation_table(corr_matrix)
+
+            # Utworzenie wykresu mapy ciepła
+            self._create_correlation_heatmap(corr_matrix, method)
+
+            self.status_bar.showMessage(f"Obliczono macierz korelacji ({method})")
+            print(f"Obliczono macierz korelacji metodą: {method}")
+
+        except Exception as error:
+            print(f"Błąd przy obliczaniu korelacji: {error}")
+            QMessageBox.critical(
+                self, "Błąd krytyczny", f"Wystąpił błąd: {str(error)}"
             )
-            return
 
-        # Aktualizacja tabeli korelacji
+    def _update_correlation_table(self, corr_matrix):
+        """
+        Aktualizacja tabeli korelacji.
+
+        Args:
+            corr_matrix (pandas.DataFrame): Macierz korelacji.
+        """
         self.correlation_table.setRowCount(len(corr_matrix.index))
         self.correlation_table.setColumnCount(len(corr_matrix.columns))
         self.correlation_table.setHorizontalHeaderLabels(list(corr_matrix.columns))
@@ -113,35 +147,139 @@ class CorrelationTab(QWidget):
         for i in range(len(corr_matrix.index)):
             for j in range(len(corr_matrix.columns)):
                 value = corr_matrix.iloc[i, j]
-                item = QTableWidgetItem(f"{value:.2f}")
+                item = QTableWidgetItem(f"{value:.3f}")
 
                 # Kolorowanie komórek w zależności od wartości korelacji
                 if i != j:  # Pomijamy przekątną (zawsze 1.0)
                     if abs(value) > 0.7:
-                        item.setBackground(QColor(255, 0, 0, 100))  # Czerwony (silna korelacja)
+                        item.setBackground(QColor(255, 100, 100, 150))  # Czerwony (silna korelacja)
                     elif abs(value) > 0.5:
-                        item.setBackground(QColor(255, 165, 0, 100))  # Pomarańczowy (umiarkowana korelacja)
+                        item.setBackground(QColor(255, 165, 0, 150))   # Pomarańczowy (umiarkowana korelacja)
                     elif abs(value) > 0.3:
-                        item.setBackground(QColor(255, 255, 0, 100))  # Żółty (słaba korelacja)
+                        item.setBackground(QColor(255, 255, 100, 150)) # Żółty (słaba korelacja)
+                else:
+                    # Przekątna - szare tło
+                    item.setBackground(QColor(200, 200, 200, 100))
 
                 self.correlation_table.setItem(i, j, item)
 
         # Dopasowanie szerokości kolumn
         self.correlation_table.resizeColumnsToContents()
 
-        # Utworzenie wykresu mapy ciepła
-        self.correlation_canvas.fig.clear()
+    def _create_correlation_heatmap(self, corr_matrix, method):
+        """
+        Tworzenie wykresu mapy ciepła korelacji.
 
-        # Utworzenie mapy ciepła korelacji
-        fig = self.data_visualizer.create_correlation_heatmap(
-            title=f"Macierz korelacji ({method})",
-            annot=True,
-            fmt='.2f'
-        )
+        Args:
+            corr_matrix (pandas.DataFrame): Macierz korelacji.
+            method (str): Metoda korelacji.
+        """
+        try:
+            # Import i użycie funkcji wizualizacji z utils
+            from utils.visualization import create_correlation_heatmap
 
-        if fig:
-            # Kopiowanie wykresu z data_visualizer do canvas
-            self.correlation_canvas.fig = fig
+            # Utworzenie mapy ciepła
+            fig = create_correlation_heatmap(
+                self.current_data,
+                title=f"Macierz korelacji ({method})"
+            )
+
+            if fig:
+                # Zastąpienie figury w canvas
+                self.correlation_canvas.fig.clear()
+
+                # Skopiowanie osi z utworzonej figury
+                original_axes = fig.get_axes()
+                if original_axes:
+                    # Utworzenie nowej osi w canvas
+                    new_ax = self.correlation_canvas.fig.add_subplot(111)
+
+                    # Ponowne utworzenie mapy ciepła bezpośrednio na nowej osi
+                    import seaborn as sns
+                    sns.heatmap(
+                        corr_matrix,
+                        annot=True,
+                        fmt='.2f',
+                        cmap='coolwarm',
+                        center=0,
+                        square=True,
+                        ax=new_ax,
+                        cbar_kws={"shrink": 0.8}
+                    )
+
+                    new_ax.set_title(f"Macierz korelacji ({method})", fontsize=14, fontweight='bold')
+
+                # Odświeżenie canvas
+                self.correlation_canvas.draw()
+
+            else:
+                print("Nie udało się utworzyć mapy ciepła")
+
+        except Exception as error:
+            print(f"Błąd przy tworzeniu mapy ciepła: {error}")
+            # Fallback - prosty wykres bez seaborn
+            self._create_simple_heatmap(corr_matrix, method)
+
+    def _create_simple_heatmap(self, corr_matrix, method):
+        """
+        Tworzenie prostej mapy ciepła bez seaborn (fallback).
+
+        Args:
+            corr_matrix (pandas.DataFrame): Macierz korelacji.
+            method (str): Metoda korelacji.
+        """
+        try:
+            self.correlation_canvas.fig.clear()
+            ax = self.correlation_canvas.fig.add_subplot(111)
+
+            # Prosty heatmap z matplotlib
+            im = ax.imshow(corr_matrix.values, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+
+            # Etykiety osi
+            ax.set_xticks(range(len(corr_matrix.columns)))
+            ax.set_yticks(range(len(corr_matrix.index)))
+            ax.set_xticklabels(corr_matrix.columns, rotation=45, ha='right')
+            ax.set_yticklabels(corr_matrix.index)
+
+            # Dodanie wartości do komórek
+            for i in range(len(corr_matrix.index)):
+                for j in range(len(corr_matrix.columns)):
+                    text = ax.text(j, i, f'{corr_matrix.iloc[i, j]:.2f}',
+                                 ha="center", va="center", color="black", fontsize=8)
+
+            # Tytuł
+            ax.set_title(f"Macierz korelacji ({method})", fontsize=14, fontweight='bold')
+
+            # Colorbar
+            self.correlation_canvas.fig.colorbar(im, ax=ax, shrink=0.8)
+
+            # Dopasowanie layoutu
+            self.correlation_canvas.fig.tight_layout()
             self.correlation_canvas.draw()
 
-        self.status_bar.showMessage(f"Obliczono macierz korelacji ({method})")
+        except Exception as error:
+            print(f"Błąd przy tworzeniu prostej mapy ciepła: {error}")
+
+    def save_correlation(self):
+        """Zapisuje macierz korelacji do pliku CSV."""
+        if self.correlation_table.rowCount() == 0:
+            QMessageBox.warning(self, "Błąd", "Brak macierzy korelacji do zapisania.")
+            return
+
+        from PyQt5.QtWidgets import QFileDialog
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Zapisz korelacje", "", "Pliki CSV (*.csv)"
+        )
+
+        if file_path:
+            try:
+                from utils.data_processor import calculate_correlation
+                method = self.correlation_method_combo.currentText()
+                corr_matrix = calculate_correlation(self.current_data, method=method)
+
+                if corr_matrix is not None:
+                    corr_matrix.to_csv(file_path)
+                    self.status_bar.showMessage(f"Zapisano korelacje do {file_path}")
+            except Exception as e:
+                QMessageBox.warning(self, "Błąd", f"Nie udało się zapisać: {str(e)}")

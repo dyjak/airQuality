@@ -1,5 +1,6 @@
 """
 Moduł zawierający klasę zakładki wizualizacji.
+ZAKTUALIZOWANY - używa prostych funkcji z utils zamiast obiektów.
 """
 import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
@@ -13,18 +14,16 @@ from ..matplotlib_canvas import MatplotlibCanvas, NavigationToolbar
 class VisualizationTab(QWidget):
     """Zakładka wizualizacji."""
 
-    def __init__(self, data_visualizer, status_bar):
+    def __init__(self, status_bar):
         """
         Inicjalizacja zakładki wizualizacji.
 
         Args:
-            data_visualizer (DataVisualizer): Obiekt wizualizujący dane.
             status_bar (QStatusBar): Pasek stanu głównego okna.
         """
         super(VisualizationTab, self).__init__()
-
-        self.data_visualizer = data_visualizer
         self.status_bar = status_bar
+        self.current_data = None
 
         # Inicjalizacja interfejsu
         self.init_ui()
@@ -49,8 +48,7 @@ class VisualizationTab(QWidget):
             "Szereg czasowy",
             "Wykres słupkowy",
             "Wykres kołowy",
-            "Mapa ciepła",
-            "Wykres par"
+            "Mapa korelacji"
         ])
         self.plot_type_combo.currentIndexChanged.connect(self.update_visualization_controls)
 
@@ -71,45 +69,30 @@ class VisualizationTab(QWidget):
         self.bins_label = QLabel("Liczba przedziałów:")
         self.bins_spin = QSpinBox()
         self.bins_spin.setRange(2, 100)
-        self.bins_spin.setValue(10)
+        self.bins_spin.setValue(20)
 
         self.plot_params_layout.addWidget(self.column_combo_label)
         self.plot_params_layout.addWidget(self.column_combo)
         self.plot_params_layout.addWidget(self.bins_label)
         self.plot_params_layout.addWidget(self.bins_spin)
 
-        # Dodatkowe kontrolki, które będą pokazywane/ukrywane
+        # Dodatkowe kontrolki
         self.x_column_label = QLabel("Kolumna X:")
         self.x_column_combo = QComboBox()
 
         self.y_column_label = QLabel("Kolumna Y:")
         self.y_column_combo = QComboBox()
 
-        self.z_column_label = QLabel("Kolumna Z:")
-        self.z_column_combo = QComboBox()
-
-        self.hue_column_label = QLabel("Kolumna do kolorowania:")
-        self.hue_column_combo = QComboBox()
-        self.hue_column_combo.addItem("Brak")
-
         # Ukrywamy dodatkowe kontrolki
         self.x_column_label.hide()
         self.x_column_combo.hide()
         self.y_column_label.hide()
         self.y_column_combo.hide()
-        self.z_column_label.hide()
-        self.z_column_combo.hide()
-        self.hue_column_label.hide()
-        self.hue_column_combo.hide()
 
         self.plot_params_layout.addWidget(self.x_column_label)
         self.plot_params_layout.addWidget(self.x_column_combo)
         self.plot_params_layout.addWidget(self.y_column_label)
         self.plot_params_layout.addWidget(self.y_column_combo)
-        self.plot_params_layout.addWidget(self.z_column_label)
-        self.plot_params_layout.addWidget(self.z_column_combo)
-        self.plot_params_layout.addWidget(self.hue_column_label)
-        self.plot_params_layout.addWidget(self.hue_column_combo)
 
         self.plot_params_group.setLayout(self.plot_params_layout)
         control_layout.addWidget(self.plot_params_group)
@@ -145,6 +128,19 @@ class VisualizationTab(QWidget):
 
         layout.addWidget(splitter)
 
+    def update_data(self, data):
+        """
+        Aktualizacja danych po wczytaniu nowego zbioru.
+
+        Args:
+            data (pandas.DataFrame): Nowe dane do wizualizacji.
+        """
+        self.current_data = data
+        if data is not None:
+            columns = list(data.columns)
+            self.update_columns(columns)
+            print(f"VisualizationTab: zaktualizowano dane ({len(data)} wierszy, {len(columns)} kolumn)")
+
     def update_columns(self, columns):
         """
         Aktualizacja list kolumn.
@@ -161,13 +157,6 @@ class VisualizationTab(QWidget):
         self.y_column_combo.clear()
         self.y_column_combo.addItems(columns)
 
-        self.z_column_combo.clear()
-        self.z_column_combo.addItems(columns)
-
-        self.hue_column_combo.clear()
-        self.hue_column_combo.addItem("Brak")
-        self.hue_column_combo.addItems(columns)
-
     def update_visualization_controls(self):
         """Aktualizacja kontrolek wizualizacji w zależności od wybranego typu wykresu."""
         plot_type = self.plot_type_combo.currentText()
@@ -181,10 +170,6 @@ class VisualizationTab(QWidget):
         self.x_column_combo.hide()
         self.y_column_label.hide()
         self.y_column_combo.hide()
-        self.z_column_label.hide()
-        self.z_column_combo.hide()
-        self.hue_column_label.hide()
-        self.hue_column_combo.hide()
 
         # Pokazanie odpowiednich kontrolek w zależności od typu wykresu
         if plot_type == "Histogram":
@@ -201,7 +186,7 @@ class VisualizationTab(QWidget):
             self.y_column_label.show()
             self.y_column_combo.show()
         elif plot_type == "Szereg czasowy":
-            self.x_column_label.setText("Kolumna daty:")
+            self.x_column_label.setText("Kolumna daty/czasu:")
             self.x_column_label.show()
             self.x_column_combo.show()
             self.y_column_label.setText("Kolumna wartości:")
@@ -217,103 +202,203 @@ class VisualizationTab(QWidget):
         elif plot_type == "Wykres kołowy":
             self.column_combo_label.show()
             self.column_combo.show()
-        elif plot_type == "Mapa ciepła":
-            self.x_column_label.show()
-            self.x_column_combo.show()
-            self.y_column_label.show()
-            self.y_column_combo.show()
-            self.z_column_label.show()
-            self.z_column_combo.show()
-        elif plot_type == "Wykres par":
-            self.hue_column_label.show()
-            self.hue_column_combo.show()
+        elif plot_type == "Mapa korelacji":
+            # Mapa korelacji nie potrzebuje dodatkowych parametrów
+            pass
 
     def generate_plot(self):
         """Generowanie wykresu na podstawie wybranych parametrów."""
-        if self.data_visualizer.data is None:
+        if self.current_data is None:
             QMessageBox.warning(
                 self, "Błąd", "Brak danych do wizualizacji."
             )
             return
 
-        # Pobranie typu wykresu
-        plot_type = self.plot_type_combo.currentText()
+        try:
+            # Pobranie typu wykresu
+            plot_type = self.plot_type_combo.currentText()
 
-        # Wyczyszczenie płótna
-        self.plot_canvas.fig.clear()
+            # Import funkcji wizualizacji z utils
+            from utils.visualization import (create_histogram, create_boxplot,
+                                            create_scatter_plot, create_bar_chart,
+                                            create_pie_chart, create_line_plot,
+                                            create_correlation_heatmap)
 
-        # Generowanie wykresu w zależności od typu
-        if plot_type == "Histogram":
-            column = self.column_combo.currentText()
-            bins = self.bins_spin.value()
+            # Wyczyszczenie płótna
+            self.plot_canvas.fig.clear()
+            fig = None
 
-            fig = self.data_visualizer.create_histogram(
-                column, bins=bins, title=f"Histogram dla {column}"
+            # Generowanie wykresu w zależności od typu
+            if plot_type == "Histogram":
+                column = self.column_combo.currentText()
+                bins = self.bins_spin.value()
+
+                if not column:
+                    QMessageBox.warning(self, "Błąd", "Nie wybrano kolumny.")
+                    return
+
+                fig = create_histogram(
+                    self.current_data, column, bins=bins,
+                    title=f"Histogram - {column}"
+                )
+
+            elif plot_type == "Wykres pudełkowy":
+                column = self.column_combo.currentText()
+
+                if not column:
+                    QMessageBox.warning(self, "Błąd", "Nie wybrano kolumny.")
+                    return
+
+                fig = create_boxplot(
+                    self.current_data, column,
+                    title=f"Wykres pudełkowy - {column}"
+                )
+
+            elif plot_type == "Wykres punktowy":
+                x_column = self.x_column_combo.currentText()
+                y_column = self.y_column_combo.currentText()
+
+                if not x_column or not y_column:
+                    QMessageBox.warning(self, "Błąd", "Nie wybrano kolumn X i Y.")
+                    return
+
+                fig = create_scatter_plot(
+                    self.current_data, x_column, y_column,
+                    title=f"Wykres punktowy - {x_column} vs {y_column}"
+                )
+
+            elif plot_type == "Szereg czasowy":
+                x_column = self.x_column_combo.currentText()
+                y_column = self.y_column_combo.currentText()
+
+                if not x_column or not y_column:
+                    QMessageBox.warning(self, "Błąd", "Nie wybrano kolumn.")
+                    return
+
+                fig = create_line_plot(
+                    self.current_data, x_column, y_column,
+                    title=f"Szereg czasowy - {y_column}"
+                )
+
+            elif plot_type == "Wykres słupkowy":
+                x_column = self.x_column_combo.currentText()
+                y_column = self.y_column_combo.currentText() if self.y_column_combo.currentText() else None
+
+                if not x_column:
+                    QMessageBox.warning(self, "Błąd", "Nie wybrano kolumny kategorii.")
+                    return
+
+                fig = create_bar_chart(
+                    self.current_data, x_column, y_column,
+                    title=f"Wykres słupkowy - {x_column}"
+                )
+
+            elif plot_type == "Wykres kołowy":
+                column = self.column_combo.currentText()
+
+                if not column:
+                    QMessageBox.warning(self, "Błąd", "Nie wybrano kolumny.")
+                    return
+
+                fig = create_pie_chart(
+                    self.current_data, column,
+                    title=f"Wykres kołowy - {column}"
+                )
+
+            elif plot_type == "Mapa korelacji":
+                fig = create_correlation_heatmap(
+                    self.current_data,
+                    title="Mapa korelacji"
+                )
+
+            else:
+                QMessageBox.warning(
+                    self, "Błąd", "Nieznany typ wykresu."
+                )
+                return
+
+            # Wyświetlenie wykresu
+            if fig:
+                # Kopiowanie wykresu do canvas
+                self._copy_figure_to_canvas(fig)
+                self.status_bar.showMessage(f"Wygenerowano wykres: {plot_type}")
+                print(f"Wygenerowano wykres: {plot_type}")
+            else:
+                QMessageBox.warning(
+                    self, "Błąd", "Nie udało się wygenerować wykresu. Sprawdź dane i wybrane kolumny."
+                )
+
+        except Exception as error:
+            print(f"Błąd przy generowaniu wykresu: {error}")
+            QMessageBox.critical(
+                self, "Błąd krytyczny", f"Wystąpił błąd: {str(error)}"
             )
-        elif plot_type == "Wykres pudełkowy":
-            column = self.column_combo.currentText()
 
-            fig = self.data_visualizer.create_boxplot(
-                column, title=f"Wykres pudełkowy dla {column}"
-            )
-        elif plot_type == "Wykres punktowy":
-            x_column = self.x_column_combo.currentText()
-            y_column = self.y_column_combo.currentText()
+    def _copy_figure_to_canvas(self, source_fig):
+        """
+        Kopiuje wykres z funkcji wizualizacji do canvas GUI.
 
-            fig = self.data_visualizer.create_scatter_plot(
-                x_column, y_column, title=f"Wykres punktowy: {x_column} vs {y_column}"
-            )
-        elif plot_type == "Szereg czasowy":
-            date_column = self.x_column_combo.currentText()
-            value_column = self.y_column_combo.currentText()
+        Args:
+            source_fig: Figura matplotlib do skopiowania.
+        """
+        try:
+            if source_fig is None:
+                return
 
-            fig = self.data_visualizer.create_time_series_plot(
-                date_column, value_column, title=f"Szereg czasowy: {value_column}"
-            )
-        elif plot_type == "Wykres słupkowy":
-            x_column = self.x_column_combo.currentText()
-            y_column = self.y_column_combo.currentText() if self.y_column_combo.currentIndex() > 0 else None
+            # Prościej - po prostu zastąp figurę
+            self.plot_canvas.fig.clear()
 
-            fig = self.data_visualizer.create_bar_chart(
-                x_column, y_column, title=f"Wykres słupkowy dla {x_column}"
-            )
-        elif plot_type == "Wykres kołowy":
-            column = self.column_combo.currentText()
+            # Skopiuj wszystkie axes z oryginalnej figury
+            for i, ax in enumerate(source_fig.axes):
+                new_ax = self.plot_canvas.fig.add_subplot(len(source_fig.axes), 1, i + 1)
 
-            fig = self.data_visualizer.create_pie_chart(
-                column, title=f"Wykres kołowy dla {column}"
-            )
-        elif plot_type == "Mapa ciepła":
-            x_column = self.x_column_combo.currentText()
-            y_column = self.y_column_combo.currentText()
-            z_column = self.z_column_combo.currentText()
+                # Skopiuj linie
+                for line in ax.lines:
+                    new_ax.plot(line.get_xdata(), line.get_ydata(),
+                                color=line.get_color(), linewidth=line.get_linewidth(),
+                                linestyle=line.get_linestyle(), marker=line.get_marker(),
+                                label=line.get_label())
 
-            fig = self.data_visualizer.create_heatmap(
-                x_column, y_column, z_column,
-                title=f"Mapa ciepła: {z_column} według {x_column} i {y_column}"
-            )
-        elif plot_type == "Wykres par":
-            hue_column = self.hue_column_combo.currentText() if self.hue_column_combo.currentIndex() > 0 else None
+                # Skopiuj scatter plots
+                for collection in ax.collections:
+                    if hasattr(collection, 'get_offsets') and len(collection.get_offsets()) > 0:
+                        offsets = collection.get_offsets()
+                        colors = collection.get_facecolors()
+                        sizes = collection.get_sizes()
+                        new_ax.scatter(offsets[:, 0], offsets[:, 1], c=colors, s=sizes)
 
-            fig = self.data_visualizer.create_pair_plot(
-                hue=hue_column, title="Wykres par"
-            )
-        else:
-            QMessageBox.warning(
-                self, "Błąd", "Nieznany typ wykresu."
-            )
-            return
+                # Skopiuj histogramy i bar charts
+                for patch in ax.patches:
+                    if hasattr(patch, 'get_x') and hasattr(patch, 'get_width'):
+                        new_ax.add_patch(type(patch)(
+                            (patch.get_x(), patch.get_y()),
+                            patch.get_width(),
+                            patch.get_height(),
+                            facecolor=patch.get_facecolor(),
+                            edgecolor=patch.get_edgecolor()
+                        ))
 
-        if fig:
-            # Kopiowanie wykresu z data_visualizer do canvas
-            self.plot_canvas.fig = fig
+                # Skopiuj etykiety
+                new_ax.set_title(ax.get_title())
+                new_ax.set_xlabel(ax.get_xlabel())
+                new_ax.set_ylabel(ax.get_ylabel())
+                new_ax.set_xlim(ax.get_xlim())
+                new_ax.set_ylim(ax.get_ylim())
+
+                if ax.legend_:
+                    new_ax.legend()
+
+                if ax.get_xgridlines() or ax.get_ygridlines():
+                    new_ax.grid(True)
+
+            self.plot_canvas.fig.tight_layout()
             self.plot_canvas.draw()
 
-            self.status_bar.showMessage(f"Wygenerowano wykres: {plot_type}")
-        else:
-            QMessageBox.warning(
-                self, "Błąd", "Nie udało się wygenerować wykresu."
-            )
+        except Exception as error:
+            print(f"Błąd przy kopiowaniu wykresu: {error}")
+            # Fallback - bezpośrednie zastąpienie
+            self.plot_canvas.fig = source_fig
+            self.plot_canvas.draw()
 
     def save_plot(self):
         """Zapisywanie wykresu do pliku."""
@@ -323,33 +408,28 @@ class VisualizationTab(QWidget):
             )
             return
 
-        file_dialog = QFileDialog()
-        file_path, _ = file_dialog.getSaveFileName(
-            self, "Zapisz wykres", "", "Obraz PNG (*.png);;Obraz JPG (*.jpg);;Obraz SVG (*.svg);;Dokument PDF (*.pdf)"
-        )
+        try:
+            file_dialog = QFileDialog()
+            file_path, _ = file_dialog.getSaveFileName(
+                self, "Zapisz wykres", "",
+                "Obraz PNG (*.png);;Obraz JPG (*.jpg);;Obraz SVG (*.svg);;Dokument PDF (*.pdf)"
+            )
 
-        if file_path:
-            # Pobranie rozszerzenia pliku
-            extension = os.path.splitext(file_path)[1].lower()
+            if file_path:
+                # Import funkcji zapisywania z utils
+                from utils.visualization import save_plot
 
-            if extension == '.png':
-                format = 'png'
-            elif extension == '.jpg' or extension == '.jpeg':
-                format = 'jpg'
-            elif extension == '.svg':
-                format = 'svg'
-            elif extension == '.pdf':
-                format = 'pdf'
-            else:
-                format = 'png'
-                file_path += '.png'
+                success = save_plot(self.plot_canvas.fig, file_path, dpi=300)
 
-            # Zapisywanie wykresu
-            success = self.data_visualizer.save_figure(self.plot_canvas.fig, file_path, dpi=300)
+                if success:
+                    self.status_bar.showMessage(f"Zapisano wykres do pliku {os.path.basename(file_path)}")
+                else:
+                    QMessageBox.warning(
+                        self, "Błąd", "Nie udało się zapisać wykresu."
+                    )
 
-            if success:
-                self.status_bar.showMessage(f"Zapisano wykres do pliku {os.path.basename(file_path)}")
-            else:
-                QMessageBox.warning(
-                    self, "Błąd", "Nie udało się zapisać wykresu."
-                )
+        except Exception as error:
+            print(f"Błąd przy zapisywaniu wykresu: {error}")
+            QMessageBox.critical(
+                self, "Błąd krytyczny", f"Wystąpił błąd: {str(error)}"
+            )

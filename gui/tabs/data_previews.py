@@ -1,5 +1,6 @@
 """
 Moduł zawierający klasę zakładki podglądu danych.
+ZAKTUALIZOWANY - przyjmuje dane bezpośrednio zamiast przez data_loader.
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QTextEdit,
                              QTableWidget, QTableWidgetItem, QHeaderView)
@@ -11,6 +12,7 @@ class DataPreviewTab(QWidget):
     def __init__(self):
         """Inicjalizacja zakładki podglądu danych."""
         super(DataPreviewTab, self).__init__()
+        self.current_data = None
 
         # Inicjalizacja interfejsu
         self.init_ui()
@@ -25,12 +27,13 @@ class DataPreviewTab(QWidget):
 
         self.data_info_text = QTextEdit()
         self.data_info_text.setReadOnly(True)
+        self.data_info_text.setMaximumHeight(200)  # Ograniczenie wysokości
 
         info_layout.addWidget(self.data_info_text)
         info_group.setLayout(info_layout)
 
         # Tabela z danymi
-        table_group = QGroupBox("Podgląd danych")
+        table_group = QGroupBox("Podgląd danych (pierwsze 1000 wierszy)")
         table_layout = QVBoxLayout()
 
         self.data_table = QTableWidget()
@@ -42,65 +45,135 @@ class DataPreviewTab(QWidget):
         layout.addWidget(info_group, 1)
         layout.addWidget(table_group, 2)
 
-    def update_data(self, data_loader):
+    def update_data(self, data):
         """
         Aktualizacja wyświetlanych danych.
 
         Args:
-            data_loader (DataLoader): Obiekt wczytujący dane.
+            data (pandas.DataFrame): Nowe dane do wyświetlenia.
         """
-        if data_loader.get_data() is None:
+        self.current_data = data
+
+        if data is not None:
+            # Aktualizacja informacji o danych
+            self._update_data_info()
+
+            # Aktualizacja tabeli danych
+            self._update_data_table()
+
+            print(f"DataPreviewTab: zaktualizowano dane ({len(data)} wierszy, {len(data.columns)} kolumn)")
+        else:
+            # Wyczyszczenie interfejsu
+            self.data_info_text.clear()
+            self.data_info_text.append("Brak danych do wyświetlenia")
+            self.data_table.setRowCount(0)
+            self.data_table.setColumnCount(0)
+
+    def _update_data_info(self):
+        """Aktualizacja informacji o danych."""
+        if self.current_data is None:
             return
 
-        # Aktualizacja informacji o danych
-        self._update_data_info(data_loader)
+        try:
+            # Podstawowe informacje
+            shape = self.current_data.shape
+            info_text = f"Liczba wierszy: {shape[0]}\n"
+            info_text += f"Liczba kolumn: {shape[1]}\n\n"
 
-        # Aktualizacja tabeli danych
-        self._update_data_table(data_loader)
+            # Rozmiar w pamięci
+            memory_usage = self.current_data.memory_usage(deep=True).sum()
+            memory_mb = memory_usage / (1024 * 1024)
+            info_text += f"Rozmiar w pamięci: {memory_mb:.2f} MB\n\n"
 
-    def _update_data_info(self, data_loader):
-        """
-        Aktualizacja informacji o danych.
+            # Typy danych
+            info_text += "Typy kolumn:\n"
+            for col, dtype in self.current_data.dtypes.items():
+                info_text += f"  {col}: {dtype}\n"
 
-        Args:
-            data_loader (DataLoader): Obiekt wczytujący dane.
-        """
-        # Pobranie informacji o danych
-        info = data_loader.get_data_info()
-        shape = data_loader.get_data_shape()
+            # Brakujące wartości
+            missing = self.current_data.isnull().sum()
+            total_missing = missing.sum()
 
-        # Aktualizacja pola tekstowego
-        self.data_info_text.clear()
-        self.data_info_text.append(f"Liczba wierszy: {shape[0]}")
-        self.data_info_text.append(f"Liczba kolumn: {shape[1]}")
-        self.data_info_text.append("\nInformacje o danych:")
+            if total_missing > 0:
+                info_text += f"\nBrakujące wartości (łącznie: {total_missing}):\n"
+                for col, count in missing.items():
+                    if count > 0:
+                        percent = (count / len(self.current_data)) * 100
+                        info_text += f"  {col}: {count} ({percent:.1f}%)\n"
+            else:
+                info_text += "\nBrak brakujących wartości.\n"
 
-        if isinstance(info, list):
-            for line in info:
-                self.data_info_text.append(str(line))
-        else:
-            self.data_info_text.append(str(info))
+            # Duplikaty
+            duplicates = self.current_data.duplicated().sum()
+            if duplicates > 0:
+                info_text += f"\nDuplikaty: {duplicates} wierszy\n"
+            else:
+                info_text += "\nBrak duplikatów.\n"
 
-    def _update_data_table(self, data_loader):
-        """
-        Aktualizacja tabeli danych.
+            # Podstawowe statystyki numeryczne
+            numeric_columns = self.current_data.select_dtypes(include=['number']).columns
+            if len(numeric_columns) > 0:
+                info_text += f"\nKolumny numeryczne: {len(numeric_columns)}\n"
 
-        Args:
-            data_loader (DataLoader): Obiekt wczytujący dane.
-        """
-        # Pobranie danych
-        data = data_loader.get_data()
+            # Kolumny tekstowe
+            text_columns = self.current_data.select_dtypes(include=['object']).columns
+            if len(text_columns) > 0:
+                info_text += f"Kolumny tekstowe: {len(text_columns)}\n"
 
-        # Aktualizacja tabeli
-        self.data_table.setRowCount(min(100, len(data)))  # Ograniczenie do 100 wierszy dla wydajności
-        self.data_table.setColumnCount(len(data.columns))
-        self.data_table.setHorizontalHeaderLabels(list(data.columns))
+            # Aktualizacja pola tekstowego
+            self.data_info_text.clear()
+            self.data_info_text.append(info_text)
 
-        # Wypełnienie tabeli danymi
-        for i in range(min(100, len(data))):
-            for j in range(len(data.columns)):
-                value = str(data.iloc[i, j])
-                self.data_table.setItem(i, j, QTableWidgetItem(value))
+        except Exception as error:
+            print(f"Błąd przy aktualizacji informacji o danych: {error}")
+            self.data_info_text.clear()
+            self.data_info_text.append(f"Błąd przy wyświetlaniu informacji: {str(error)}")
 
-        # Dopasowanie szerokości kolumn
-        self.data_table.resizeColumnsToContents()
+    def _update_data_table(self):
+        """Aktualizacja tabeli danych."""
+        if self.current_data is None:
+            return
+
+        try:
+            data = self.current_data
+
+            # Ograniczenie do 1000 wierszy dla wydajności
+            max_rows = min(1000, len(data))
+
+            # Aktualizacja tabeli
+            self.data_table.setRowCount(max_rows)
+            self.data_table.setColumnCount(len(data.columns))
+            self.data_table.setHorizontalHeaderLabels(list(data.columns))
+
+            # Wypełnienie tabeli danymi
+            for i in range(max_rows):
+                for j in range(len(data.columns)):
+                    value = data.iloc[i, j]
+
+                    # Formatowanie wartości
+                    if value is None or (isinstance(value, float) and str(value) == 'nan'):
+                        display_value = "NaN"
+                    elif isinstance(value, float):
+                        display_value = f"{value:.4f}"
+                    else:
+                        display_value = str(value)
+
+                    # Ograniczenie długości tekstu
+                    if len(display_value) > 50:
+                        display_value = display_value[:47] + "..."
+
+                    self.data_table.setItem(i, j, QTableWidgetItem(display_value))
+
+            # Dopasowanie szerokości kolumn
+            self.data_table.resizeColumnsToContents()
+
+            # Ograniczenie maksymalnej szerokości kolumn
+            header = self.data_table.horizontalHeader()
+            for i in range(len(data.columns)):
+                if header.sectionSize(i) > 200:
+                    header.resizeSection(i, 200)
+
+        except Exception as error:
+            print(f"Błąd przy aktualizacji tabeli danych: {error}")
+            self.data_table.setRowCount(0)
+            self.data_table.setColumnCount(0)

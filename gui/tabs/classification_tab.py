@@ -1,7 +1,9 @@
 """
 Moduł zawierający klasę zakładki klasyfikacji i grupowania.
+POPRAWIONY - używa prostych funkcji z utils.
 """
 import numpy as np
+import pandas as pd
 from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QGroupBox, QLabel,
                              QComboBox, QPushButton, QListWidget, QAbstractItemView,
                              QSpinBox, QDoubleSpinBox, QSplitter, QTableWidget,
@@ -14,18 +16,17 @@ from ..matplotlib_canvas import MatplotlibCanvas, NavigationToolbar
 class ClassificationTab(QWidget):
     """Zakładka klasyfikacji i grupowania."""
 
-    def __init__(self, data_processor, status_bar):
+    def __init__(self, status_bar):
         """
         Inicjalizacja zakładki klasyfikacji i grupowania.
 
         Args:
-            data_processor (DataProcessor): Obiekt przetwarzający dane.
             status_bar (QStatusBar): Pasek stanu głównego okna.
         """
         super(ClassificationTab, self).__init__()
 
-        self.data_processor = data_processor
         self.status_bar = status_bar
+        self.current_data = None
 
         # Inicjalizacja interfejsu
         self.init_ui()
@@ -130,53 +131,12 @@ class ClassificationTab(QWidget):
         clustering_group.setLayout(clustering_layout)
         control_layout.addWidget(clustering_group)
 
-        # Reguły asocjacyjne
+        # Reguły asocjacyjne (uproszczone - bez implementacji)
         association_group = QGroupBox("Reguły asocjacyjne")
         association_layout = QVBoxLayout()
 
-        # Minimalne wsparcie
-        support_layout = QHBoxLayout()
-
-        self.min_support_spin = QDoubleSpinBox()
-        self.min_support_spin.setRange(0.01, 1.0)
-        self.min_support_spin.setValue(0.1)
-        self.min_support_spin.setSingleStep(0.01)
-
-        support_layout.addWidget(QLabel("Minimalne wsparcie:"))
-        support_layout.addWidget(self.min_support_spin)
-
-        association_layout.addLayout(support_layout)
-
-        # Minimalna pewność
-        confidence_layout = QHBoxLayout()
-
-        self.min_confidence_spin = QDoubleSpinBox()
-        self.min_confidence_spin.setRange(0.01, 1.0)
-        self.min_confidence_spin.setValue(0.5)
-        self.min_confidence_spin.setSingleStep(0.01)
-
-        confidence_layout.addWidget(QLabel("Minimalna pewność:"))
-        confidence_layout.addWidget(self.min_confidence_spin)
-
-        association_layout.addLayout(confidence_layout)
-
-        # Minimalny współczynnik podniesienia
-        lift_layout = QHBoxLayout()
-
-        self.min_lift_spin = QDoubleSpinBox()
-        self.min_lift_spin.setRange(0.01, 10.0)
-        self.min_lift_spin.setValue(1.0)
-        self.min_lift_spin.setSingleStep(0.01)
-
-        lift_layout.addWidget(QLabel("Minimalny współczynnik podniesienia:"))
-        lift_layout.addWidget(self.min_lift_spin)
-
-        association_layout.addLayout(lift_layout)
-
-        # Przycisk do znajdowania reguł
-        find_rules_button = QPushButton("Znajdź reguły")
-        find_rules_button.clicked.connect(self.find_association_rules)
-        association_layout.addWidget(find_rules_button)
+        association_info = QLabel("Funkcjonalność w trakcie implementacji...")
+        association_layout.addWidget(association_info)
 
         association_group.setLayout(association_layout)
         control_layout.addWidget(association_group)
@@ -203,18 +163,9 @@ class ClassificationTab(QWidget):
         clustering_results_layout.addWidget(self.clustering_toolbar)
         clustering_results_layout.addWidget(self.clustering_canvas)
 
-        # Zakładka wyników reguł asocjacyjnych
-        self.association_results_tab = QWidget()
-        association_results_layout = QVBoxLayout(self.association_results_tab)
-
-        self.association_rules_table = QTableWidget()
-
-        association_results_layout.addWidget(self.association_rules_table)
-
         # Dodanie zakładek do panelu wyników
         results_panel.addTab(self.classification_results_tab, "Klasyfikacja")
         results_panel.addTab(self.clustering_results_tab, "Grupowanie")
-        results_panel.addTab(self.association_results_tab, "Reguły asocjacyjne")
 
         # Splitter do dzielenia paneli
         splitter = QSplitter(Qt.Horizontal)
@@ -223,6 +174,19 @@ class ClassificationTab(QWidget):
         splitter.setSizes([400, 600])
 
         layout.addWidget(splitter)
+
+    def update_data(self, data):
+        """
+        Aktualizacja danych po wczytaniu nowego zbioru.
+
+        Args:
+            data (pandas.DataFrame): Nowe dane do analizy.
+        """
+        self.current_data = data
+        if data is not None:
+            columns = list(data.columns)
+            self.update_columns(columns)
+            print(f"ClassificationTab: zaktualizowano dane ({len(data)} wierszy, {len(columns)} kolumn)")
 
     def update_columns(self, columns):
         """
@@ -241,8 +205,8 @@ class ClassificationTab(QWidget):
         self.clustering_features_list.addItems(columns)
 
     def classify_data(self):
-        """Klasyfikacja danych."""
-        if self.data_processor.get_data() is None:
+        """Klasyfikacja danych - uproszczona implementacja."""
+        if self.current_data is None:
             QMessageBox.warning(
                 self, "Błąd", "Brak danych do klasyfikacji."
             )
@@ -268,64 +232,98 @@ class ClassificationTab(QWidget):
             )
             return
 
-        # Pobranie typu klasyfikatora
-        classifier_type_text = self.classifier_combo.currentText()
-
-        if classifier_type_text == "Decision Tree":
-            classifier_type = 'decision_tree'
-        elif classifier_type_text == "Random Forest":
-            classifier_type = 'random_forest'
-        elif classifier_type_text == "SVM":
-            classifier_type = 'svm'
-        elif classifier_type_text == "KNN":
-            classifier_type = 'knn'
-        else:
+        # Sprawdzenie czy wybrane kolumny istnieją i czy target nie jest w features
+        if target in features:
             QMessageBox.warning(
-                self, "Błąd", "Nieznany typ klasyfikatora."
+                self, "Błąd", "Etykieta nie może być jednocześnie cechą."
             )
             return
 
-        # Pobranie rozmiaru zbioru testowego
-        test_size = self.test_size_spin.value()
+        try:
+            # Proste sprawdzenie danych
+            from sklearn.model_selection import train_test_split
+            from sklearn.tree import DecisionTreeClassifier
+            from sklearn.ensemble import RandomForestClassifier
+            from sklearn.svm import SVC
+            from sklearn.neighbors import KNeighborsClassifier
+            from sklearn.metrics import accuracy_score, classification_report
 
-        # Klasyfikacja danych
-        result = self.data_processor.classify_data(
-            features, target, classifier_type=classifier_type, test_size=test_size
-        )
+            # Przygotowanie danych
+            X = self.current_data[features].dropna()
+            y = self.current_data.loc[X.index, target].dropna()
 
-        if result:
-            # Aktualizacja pola tekstowego z wynikami
+            # Sprawdzenie czy mamy dane
+            if len(X) == 0 or len(y) == 0:
+                QMessageBox.warning(self, "Błąd", "Brak danych po usunięciu braków.")
+                return
+
+            # Podział na zbiór treningowy i testowy
+            test_size = self.test_size_spin.value()
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42
+            )
+
+            # Wybór klasyfikatora
+            classifier_type_text = self.classifier_combo.currentText()
+
+            if classifier_type_text == "Decision Tree":
+                classifier = DecisionTreeClassifier(random_state=42)
+            elif classifier_type_text == "Random Forest":
+                classifier = RandomForestClassifier(random_state=42, n_estimators=100)
+            elif classifier_type_text == "SVM":
+                classifier = SVC(random_state=42)
+            elif classifier_type_text == "KNN":
+                classifier = KNeighborsClassifier()
+            else:
+                QMessageBox.warning(self, "Błąd", "Nieznany typ klasyfikatora.")
+                return
+
+            # Trenowanie i predykcja
+            classifier.fit(X_train, y_train)
+            y_pred = classifier.predict(X_test)
+
+            # Obliczenie wyników
+            accuracy = accuracy_score(y_test, y_pred)
+            report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
+
+            # Aktualizacja wyników
             self.classification_results_text.clear()
             self.classification_results_text.append(f"Klasyfikator: {classifier_type_text}")
             self.classification_results_text.append(f"Cechy: {', '.join(features)}")
             self.classification_results_text.append(f"Etykieta: {target}")
             self.classification_results_text.append(f"Rozmiar zbioru testowego: {test_size}")
-            self.classification_results_text.append(f"\nDokładność: {result['accuracy']:.4f}")
+            self.classification_results_text.append(f"Rozmiar danych: {len(X)} próbek")
+            self.classification_results_text.append(f"\nDokładność: {accuracy:.4f}")
 
-            # Dodanie raportu klasyfikacji
             self.classification_results_text.append("\nRaport klasyfikacji:")
-            for label, metrics in result['classification_report'].items():
+            for label, metrics in report.items():
                 if isinstance(metrics, dict):
                     self.classification_results_text.append(f"\nKlasa: {label}")
                     for metric, value in metrics.items():
-                        self.classification_results_text.append(f"  {metric}: {value:.4f}")
+                        if isinstance(value, (int, float)):
+                            self.classification_results_text.append(f"  {metric}: {value:.4f}")
 
-            self.status_bar.showMessage(f"Dokonano klasyfikacji danych: {classifier_type_text}")
+            self.status_bar.showMessage(f"Dokonano klasyfikacji: {classifier_type_text}, dokładność: {accuracy:.4f}")
 
-            # Przełączenie na zakładkę z wynikami klasyfikacji
-            self.parent().tabs.setCurrentIndex(self.parent().tabs.indexOf(self))
-        else:
+        except ImportError:
             QMessageBox.warning(
-                self, "Błąd", "Nie udało się dokonać klasyfikacji danych."
+                self, "Błąd", "Brak biblioteki scikit-learn. Zainstaluj: pip install scikit-learn"
+            )
+        except Exception as error:
+            print(f"Błąd przy klasyfikacji: {error}")
+            QMessageBox.critical(
+                self, "Błąd", f"Wystąpił błąd: {str(error)}"
             )
 
     def cluster_data(self):
-        """Grupowanie danych."""
-        if self.data_processor.get_data() is None:
+        """Grupowanie danych - uproszczona implementacja."""
+        if self.current_data is None:
             QMessageBox.warning(
                 self, "Błąd", "Brak danych do grupowania."
             )
             return
+
+        import matplotlib.pyplot as plt
 
         # Pobranie wybranych cech
         selected_items = self.clustering_features_list.selectedItems()
@@ -338,132 +336,133 @@ class ClassificationTab(QWidget):
 
         features = [item.text() for item in selected_items]
 
-        # Pobranie liczby klastrów
+        # Pobranie parametrów
         n_clusters = self.n_clusters_spin.value()
-
-        # Pobranie metody grupowania
         method_text = self.clustering_method_combo.currentText()
 
-        if method_text == "K-means":
-            method = 'kmeans'
-        elif method_text == "Hierarchical":
-            method = 'hierarchical'
-        elif method_text == "DBSCAN":
-            method = 'dbscan'
-        else:
-            QMessageBox.warning(
-                self, "Błąd", "Nieznana metoda grupowania."
-            )
-            return
+        try:
+            from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+            from sklearn.preprocessing import StandardScaler
 
-        # Grupowanie danych
-        result = self.data_processor.cluster_data(
-            features, n_clusters=n_clusters, method=method
-        )
+            # Przygotowanie danych - konwersja na numeryczne
+            data_for_clustering = self.current_data[features].copy()
 
-        if result:
-            # Aktualizacja wykresu grupowania
+            # Konwertujemy każdą kolumnę na numeryczną
+            numeric_columns = []
+            for feature in features:
+                try:
+                    numeric_series = pd.to_numeric(data_for_clustering[feature], errors='coerce')
+                    if not numeric_series.isna().all():
+                        data_for_clustering[feature] = numeric_series
+                        numeric_columns.append(feature)
+                    else:
+                        print(f"Kolumna {feature} nie zawiera danych numerycznych")
+                except:
+                    print(f"Nie można przekonwertować kolumny {feature}")
+
+            if not numeric_columns:
+                QMessageBox.warning(self, "Błąd", "Żadna z wybranych cech nie zawiera danych numerycznych.")
+                return
+
+            # Bierzemy tylko kolumny numeryczne i usuwamy braki
+            numeric_data = data_for_clustering[numeric_columns].dropna()
+
+            if len(numeric_data) == 0:
+                QMessageBox.warning(self, "Błąd", "Brak danych po usunieciu braków.")
+                return
+
+            print(f"Grupowanie dla {len(numeric_data)} wierszy i {len(numeric_columns)} cech")
+
+            # Skalowanie danych
+            scaler = StandardScaler()
+            scaled_data = scaler.fit_transform(numeric_data)
+
+            # Wybór metody grupowania
+            if method_text == "K-means":
+                clustering = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            elif method_text == "Hierarchical":
+                clustering = AgglomerativeClustering(n_clusters=n_clusters)
+            elif method_text == "DBSCAN":
+                clustering = DBSCAN(eps=0.5, min_samples=5)
+            else:
+                QMessageBox.warning(self, "Błąd", "Nieznana metoda grupowania.")
+                return
+
+            # Grupowanie
+            labels = clustering.fit_predict(scaled_data)
+
+            # Sprawdzenie czy znaleziono klastry
+            unique_labels = np.unique(labels)
+            n_clusters_found = len(unique_labels)
+
+            if n_clusters_found <= 1:
+                QMessageBox.warning(self, "Błąd",
+                                    f"Znaleziono tylko {n_clusters_found} klastrów. Spróbuj innych parametrów.")
+                return
+
+            print(f"Znaleziono {n_clusters_found} klastrów")
+
+            # Tworzenie wykresu
             self.clustering_canvas.fig.clear()
 
-            # Jeśli mamy dokładnie 2 cechy, możemy narysować wykres punktowy
-            if len(features) == 2:
-                # Pobranie danych
-                data = result['result_data']
-                labels = result['labels']
-
-                # Rysowanie wykresu
+            if len(numeric_columns) >= 2:
+                # Wykres 2D - używamy pierwszych dwóch cech
                 ax = self.clustering_canvas.fig.add_subplot(111)
-                scatter = ax.scatter(data[features[0]], data[features[1]], c=labels, cmap='viridis')
 
-                # Dodanie legendy
-                legend1 = ax.legend(*scatter.legend_elements(), title="Klastry")
-                ax.add_artist(legend1)
+                # Tworzenie wykresu punktowego z kolorami klastrów
+                scatter = ax.scatter(
+                    numeric_data.iloc[:, 0],
+                    numeric_data.iloc[:, 1],
+                    c=labels,
+                    cmap='viridis',
+                    alpha=0.7,
+                    s=50
+                )
 
-                # Dodanie tytułu i etykiet osi
-                ax.set_title(f"Grupowanie: {method_text}")
-                ax.set_xlabel(features[0])
-                ax.set_ylabel(features[1])
+                ax.set_title(f"Grupowanie: {method_text} ({n_clusters_found} klastrów)")
+                ax.set_xlabel(numeric_columns[0])
+                ax.set_ylabel(numeric_columns[1])
+                ax.grid(True, alpha=0.3)
 
-                # Dodanie siatki
-                ax.grid(True, linestyle='--', alpha=0.7)
+                # Dodanie kolorowej legendy
+                import matplotlib.pyplot as plt
+                cbar = plt.colorbar(scatter, ax=ax)
+                cbar.set_label('Numer klastra')
+
             else:
-                # Jeśli mamy więcej niż 2 cechy, rysujemy wykres słupkowy liczebności klastrów
+                # Wykres słupkowy liczebności klastrów dla jednej cechy
                 ax = self.clustering_canvas.fig.add_subplot(111)
+                unique_labels, counts = np.unique(labels, return_counts=True)
 
-                # Zliczanie wystąpień każdego klastra
-                unique_labels, counts = np.unique(result['labels'], return_counts=True)
+                colors = plt.cm.viridis(np.linspace(0, 1, len(unique_labels)))
+                bars = ax.bar(unique_labels, counts, color=colors, edgecolor='black', alpha=0.7)
 
-                # Rysowanie wykresu słupkowego
-                ax.bar(unique_labels, counts, color='skyblue', edgecolor='black')
-
-                # Dodanie tytułu i etykiet osi
                 ax.set_title(f"Liczebność klastrów: {method_text}")
-                ax.set_xlabel("Klaster")
+                ax.set_xlabel("Numer klastra")
                 ax.set_ylabel("Liczba punktów")
 
-                # Dodanie etykiet wartości na słupkach
-                for i, v in enumerate(counts):
-                    ax.text(i, v + 0.1, str(v), ha='center')
+                # Dodanie wartości na słupkach
+                for bar, count in zip(bars, counts):
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width() / 2., height + 0.5,
+                            f'{count}', ha='center', va='bottom', fontweight='bold')
 
-                # Dodanie siatki
-                ax.grid(True, linestyle='--', alpha=0.7, axis='y')
+                ax.grid(True, alpha=0.3, axis='y')
 
-            # Aktualizacja wykresu
+            # Odświeżenie wykresu
+            self.clustering_canvas.fig.tight_layout()
             self.clustering_canvas.draw()
 
-            self.status_bar.showMessage(f"Dokonano grupowania danych: {method_text}, {n_clusters} klastrów")
+            self.status_bar.showMessage(
+                f"Grupowanie: {method_text}, {n_clusters_found} klastrów, {len(numeric_data)} punktów")
+            print(f"Grupowanie zakończone pomyślnie")
 
-            # Przełączenie na zakładkę z wynikami grupowania
-            self.parent().tabs.setCurrentWidget(self)
-        else:
+        except ImportError:
             QMessageBox.warning(
-                self, "Błąd", "Nie udało się dokonać grupowania danych."
+                self, "Błąd", "Brak biblioteki scikit-learn. Zainstaluj: pip install scikit-learn"
             )
-
-    def find_association_rules(self):
-        """Znajdowanie reguł asocjacyjnych."""
-        if self.data_processor.get_data() is None:
-            QMessageBox.warning(
-                self, "Błąd", "Brak danych do analizy."
-            )
-            return
-
-        # Pobranie parametrów
-        min_support = self.min_support_spin.value()
-        min_confidence = self.min_confidence_spin.value()
-        min_lift = self.min_lift_spin.value()
-
-        # Znajdowanie reguł asocjacyjnych
-        rules = self.data_processor.find_association_rules(
-            min_support=min_support, min_confidence=min_confidence, min_lift=min_lift
-        )
-
-        if rules is not None and not rules.empty:
-            # Aktualizacja tabeli reguł
-            self.association_rules_table.setRowCount(len(rules))
-            self.association_rules_table.setColumnCount(len(rules.columns))
-            self.association_rules_table.setHorizontalHeaderLabels(list(rules.columns))
-
-            for i in range(len(rules)):
-                for j, col in enumerate(rules.columns):
-                    value = rules.iloc[i, j]
-
-                    # Formatowanie wartości w zależności od typu
-                    if isinstance(value, float):
-                        formatted_value = f"{value:.4f}"
-                    else:
-                        formatted_value = str(value)
-
-                    self.association_rules_table.setItem(i, j, QTableWidgetItem(formatted_value))
-
-            # Dopasowanie szerokości kolumn
-            self.association_rules_table.resizeColumnsToContents()
-
-            self.status_bar.showMessage(f"Znaleziono {len(rules)} reguł asocjacyjnych")
-
-            # Przełączenie na zakładkę z wynikami reguł asocjacyjnych
-            self.parent().tabs.setCurrentWidget(self)
-        else:
-            QMessageBox.warning(
-                self, "Błąd", "Nie znaleziono reguł asocjacyjnych spełniających podane kryteria."
+        except Exception as error:
+            print(f"Błąd przy grupowaniu: {error}")
+            QMessageBox.critical(
+                self, "Błąd", f"Wystąpił błąd: {str(error)}"
             )

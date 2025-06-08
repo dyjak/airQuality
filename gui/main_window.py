@@ -1,5 +1,6 @@
 """
 Moduł zawierający klasę głównego okna aplikacji.
+ZAKTUALIZOWANY - używa prostych funkcji z utils zamiast klas.
 """
 import os
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -8,10 +9,12 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QToolBar)
 from PyQt5.QtCore import Qt
 
-from data_loader import DataLoader
-from data_processor import DataProcessor
-from data_visualizer import DataVisualizer
+# importujemy nasze proste funkcje z utils
+from utils.data_loader import load_csv_data, save_data_to_csv, check_basic_info
+from utils.data_processor import calculate_basic_statistics, calculate_correlation
+from utils.visualization import setup_plot_style
 
+# importujemy taby GUI
 from gui.tabs.data_previews import DataPreviewTab
 from gui.tabs.stats_tab import StatsTab
 from gui.tabs.correlation_tab import CorrelationTab
@@ -21,20 +24,24 @@ from gui.tabs.classification_tab import ClassificationTab
 
 
 class MainWindow(QMainWindow):
-    """Główne okno aplikacji."""
+    """Główne okno aplikacji - teraz prostsze i bardziej zrozumiałe!"""
 
     def __init__(self):
         """Inicjalizacja głównego okna aplikacji."""
         super(MainWindow, self).__init__()
 
         # Tytuł i rozmiar okna
-        self.setWindowTitle("Analiza danych o jakości powietrza")
+        self.setWindowTitle("Analiza danych o jakości powietrza - Wersja 2.0")
         self.setGeometry(100, 100, 1200, 800)
 
-        # Inicjalizacja obiektów do przetwarzania danych
-        self.data_loader = DataLoader()
-        self.data_processor = DataProcessor()
-        self.data_visualizer = DataVisualizer()
+        # zamiast obiektów mamy teraz proste zmienne
+        self.current_data = None  # aktualne dane jako ramka pandas
+        self.original_data = None  # oryginalne dane (do resetowania)
+        self.current_file_path = None  # sciezka do aktualnego pliku
+
+        # ustawiamy ladny styl wykresow od razu
+        setup_plot_style()
+        print("ustawiono ladny styl wykresow")
 
         # Tworzenie interfejsu użytkownika
         self.init_ui()
@@ -56,7 +63,7 @@ class MainWindow(QMainWindow):
         # Pasek stanu
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
-        self.statusBar.showMessage("Gotowy")
+        self.statusBar.showMessage("Gotowy - wczytaj dane zeby zaczac analize")
 
         # Przyciski do wczytywania danych
         load_data_group = QWidget()
@@ -65,6 +72,7 @@ class MainWindow(QMainWindow):
 
         self.load_data_button = QPushButton("Wczytaj dane z pliku CSV")
         self.load_data_button.clicked.connect(self.load_data_from_csv)
+        self.load_data_button.setStyleSheet("font-size: 14px; padding: 10px;")
 
         load_data_layout.addWidget(self.load_data_button)
 
@@ -73,28 +81,20 @@ class MainWindow(QMainWindow):
         # Zakładki dla różnych funkcjonalności
         self.tabs = QTabWidget()
 
-        # Zakładka podglądu danych
+        # POPRAWIONE konstruktory tabs - tylko status_bar
         self.data_preview_tab = DataPreviewTab()
+        self.stats_tab = StatsTab(self.statusBar)
+        self.correlation_tab = CorrelationTab(self.statusBar)
+        self.visualization_tab = VisualizationTab(self.statusBar)
+        self.data_processing_tab = DataProcessingTab(self.statusBar)
+        self.classification_tab = ClassificationTab(self.statusBar)
+
+        # Dodawanie zakładek
         self.tabs.addTab(self.data_preview_tab, "Podgląd danych")
-
-        # Zakładka analizy statystycznej
-        self.stats_tab = StatsTab(self.data_processor, self.statusBar)
         self.tabs.addTab(self.stats_tab, "Analiza statystyczna")
-
-        # Zakładka korelacji
-        self.correlation_tab = CorrelationTab(self.data_processor, self.data_visualizer, self.statusBar)
         self.tabs.addTab(self.correlation_tab, "Korelacje")
-
-        # Zakładka wizualizacji
-        self.visualization_tab = VisualizationTab(self.data_visualizer, self.statusBar)
         self.tabs.addTab(self.visualization_tab, "Wizualizacja")
-
-        # Zakładka przetwarzania danych
-        self.data_processing_tab = DataProcessingTab(self.data_processor, self.data_visualizer, self.statusBar)
         self.tabs.addTab(self.data_processing_tab, "Przetwarzanie danych")
-
-        # Zakładka klasyfikacji i grupowania
-        self.classification_tab = ClassificationTab(self.data_processor, self.statusBar)
         self.tabs.addTab(self.classification_tab, "Klasyfikacja i grupowanie")
 
         main_layout.addWidget(self.tabs)
@@ -161,158 +161,169 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
     def load_data_from_csv(self):
-        """Wczytywanie danych z pliku CSV."""
+        """
+        Wczytywanie danych z pliku CSV - teraz używa prostej funkcji!
+        """
         try:
+            # wybieramy plik
             file_dialog = QFileDialog()
             file_path, _ = file_dialog.getOpenFileName(
                 self, "Wczytaj plik CSV", "", "Pliki CSV (*.csv);;Wszystkie pliki (*.*)"
             )
 
-            if file_path:
-                # Okno dialogowe do wyboru separatora
-                separator_dialog = QDialog(self)
-                separator_dialog.setWindowTitle("Wybierz separator")
-                separator_layout = QVBoxLayout(separator_dialog)
+            if not file_path:
+                return  # anulowano wybor pliku
 
-                separator_combo = QComboBox()
-                separator_combo.addItems([";", ",", "\t", "|", " "])
+            # wybieramy separator
+            separator = self.ask_for_separator()
+            if separator is None:
+                return  # anulowano wybor separatora
 
-                separator_layout.addWidget(QLabel("Wybierz separator:"))
-                separator_layout.addWidget(separator_combo)
+            # wczytujemy dane prostą funkcją!
+            print(f"wczytuje dane z pliku: {file_path}")
+            self.current_data = load_csv_data(file_path, separator=separator)
 
-                buttons_layout = QHBoxLayout()
-                ok_button = QPushButton("OK")
-                ok_button.clicked.connect(separator_dialog.accept)
-                cancel_button = QPushButton("Anuluj")
-                cancel_button.clicked.connect(separator_dialog.reject)
+            if self.current_data is not None:
+                # zapisujemy oryginalne dane do resetowania
+                self.original_data = self.current_data.copy()
+                self.current_file_path = file_path
 
-                buttons_layout.addWidget(ok_button)
-                buttons_layout.addWidget(cancel_button)
+                # pokazujemy podstawowe info
+                info = check_basic_info(self.current_data)
 
-                separator_layout.addLayout(buttons_layout)
+                # aktualizujemy status
+                self.statusBar.showMessage(
+                    f"Wczytano {info['row_count']} wierszy, {info['column_count']} kolumn z {os.path.basename(file_path)}"
+                )
 
-                result = separator_dialog.exec_()
+                # aktualizujemy wszystkie taby
+                self.update_all_tabs()
 
-                if result == QDialog.Accepted:
-                    delimiter = separator_combo.currentText()
+                print("dane wczytane pomyslnie!")
 
-                    # Wczytywanie danych
-                    success = self.data_loader.load_data(file_path, delimiter=delimiter)
+            else:
+                QMessageBox.warning(self, "Błąd", "Nie udało się wczytać danych z pliku.")
 
-                    if success:
-                        self.statusBar.showMessage(f"Wczytano dane z pliku {os.path.basename(file_path)}")
+        except Exception as error:
+            print(f"blad przy wczytywaniu: {error}")
+            QMessageBox.critical(self, "Błąd krytyczny", f"Wystąpił błąd: {str(error)}")
 
-                        # Aktualizacja danych w data_processor i data_visualizer
-                        self.data_processor.set_data(self.data_loader.get_data())
-                        self.data_visualizer.set_data(self.data_loader.get_data())
+    def ask_for_separator(self):
+        """
+        Pyta uzytkownika o separator - pomocnicza funkcja
+        """
+        separator_dialog = QDialog(self)
+        separator_dialog.setWindowTitle("Wybierz separator")
+        separator_layout = QVBoxLayout(separator_dialog)
 
-                        # Aktualizacja interfejsu
-                        self.update_ui_after_data_load()
-                    else:
-                        QMessageBox.warning(
-                            self, "Błąd", "Nie udało się wczytać danych z pliku."
-                        )
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(
-                self,
-                "Błąd krytyczny",
-                f"Wystąpił błąd podczas wczytywania pliku: {str(e)}\n\n{traceback.format_exc()}"
-            )
+        separator_combo = QComboBox()
+        separator_combo.addItems([";", ",", "\t", "|", " "])
+
+        separator_layout.addWidget(QLabel("Wybierz separator:"))
+        separator_layout.addWidget(separator_combo)
+
+        buttons_layout = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(separator_dialog.accept)
+        cancel_button = QPushButton("Anuluj")
+        cancel_button.clicked.connect(separator_dialog.reject)
+
+        buttons_layout.addWidget(ok_button)
+        buttons_layout.addWidget(cancel_button)
+        separator_layout.addLayout(buttons_layout)
+
+        result = separator_dialog.exec_()
+
+        if result == QDialog.Accepted:
+            return separator_combo.currentText()
+        else:
+            return None
 
     def save_data_to_csv(self):
-        """Zapisywanie przetworzonych danych do pliku CSV."""
-        if self.data_processor.get_data() is None:
-            QMessageBox.warning(
-                self, "Błąd", "Brak danych do zapisania."
-            )
+        """
+        Zapisywanie danych do pliku CSV - teraz używa prostej funkcji!
+        """
+        if self.current_data is None:
+            QMessageBox.warning(self, "Błąd", "Brak danych do zapisania.")
             return
 
+        # wybieramy gdzie zapisac
         file_dialog = QFileDialog()
         file_path, _ = file_dialog.getSaveFileName(
             self, "Zapisz do pliku CSV", "", "Pliki CSV (*.csv);;Wszystkie pliki (*.*)"
         )
 
-        if file_path:
-            # Okno dialogowe do wyboru separatora
-            separator_dialog = QDialog(self)
-            separator_dialog.setWindowTitle("Wybierz separator")
-            separator_layout = QVBoxLayout(separator_dialog)
-
-            separator_combo = QComboBox()
-            separator_combo.addItems([";", ",", "\t", "|", " "])
-
-            separator_layout.addWidget(QLabel("Wybierz separator:"))
-            separator_layout.addWidget(separator_combo)
-
-            buttons_layout = QHBoxLayout()
-            ok_button = QPushButton("OK")
-            ok_button.clicked.connect(separator_dialog.accept)
-            cancel_button = QPushButton("Anuluj")
-            cancel_button.clicked.connect(separator_dialog.reject)
-
-            buttons_layout.addWidget(ok_button)
-            buttons_layout.addWidget(cancel_button)
-
-            separator_layout.addLayout(buttons_layout)
-
-            result = separator_dialog.exec_()
-
-            if result == QDialog.Accepted:
-                delimiter = separator_combo.currentText()
-
-                try:
-                    # Zapisywanie danych
-                    self.data_processor.get_data().to_csv(file_path, sep=delimiter, index=False)
-                    self.statusBar.showMessage(f"Zapisano dane do pliku {os.path.basename(file_path)}")
-                except Exception as e:
-                    QMessageBox.warning(
-                        self, "Błąd", f"Nie udało się zapisać danych do pliku: {e}"
-                    )
-
-    def reset_data(self):
-        """Resetowanie danych do stanu pierwotnego."""
-        if self.data_processor.get_data() is None:
-            QMessageBox.warning(
-                self, "Błąd", "Brak danych do zresetowania."
-            )
+        if not file_path:
             return
 
-        # Resetowanie danych
-        success = self.data_processor.reset_data()
+        # wybieramy separator
+        separator = self.ask_for_separator()
+        if separator is None:
+            return
+
+        # zapisujemy prostą funkcją!
+        success = save_data_to_csv(self.current_data, file_path, separator)
 
         if success:
-            # Aktualizacja danych w data_visualizer
-            self.data_visualizer.set_data(self.data_processor.get_data())
-
-            # Aktualizacja interfejsu
-            self.update_ui_after_data_load()
-
-            self.statusBar.showMessage("Zresetowano dane do stanu pierwotnego")
+            self.statusBar.showMessage(f"Zapisano dane do pliku {os.path.basename(file_path)}")
         else:
-            QMessageBox.warning(
-                self, "Błąd", "Nie udało się zresetować danych."
-            )
+            QMessageBox.warning(self, "Błąd", "Nie udało się zapisać pliku.")
 
-    def update_ui_after_data_load(self):
-        """Aktualizacja interfejsu po wczytaniu danych."""
+    def reset_data(self):
+        """
+        Resetowanie danych do stanu pierwotnego - teraz prostsze!
+        """
+        if self.original_data is None:
+            QMessageBox.warning(self, "Błąd", "Brak danych do zresetowania.")
+            return
+
+        # po prostu kopiujemy oryginalne dane
+        self.current_data = self.original_data.copy()
+
+        # aktualizujemy wszystkie taby
+        self.update_all_tabs()
+
+        self.statusBar.showMessage("Zresetowano dane do stanu pierwotnego")
+        print("dane zresetowane!")
+
+    def update_all_tabs(self):
+        """
+        Aktualizuje wszystkie zakładki po wczytaniu/zmianie danych
+        """
         try:
-            # Aktualizacja wszystkich zakładek
-            self.data_preview_tab.update_data(self.data_loader)
-            self.stats_tab.update_columns(self.data_loader.get_column_names())
-            self.correlation_tab.update_data()
-            self.visualization_tab.update_columns(self.data_loader.get_column_names())
-            self.data_processing_tab.update_columns(self.data_loader.get_column_names())
-            self.classification_tab.update_columns(self.data_loader.get_column_names())
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(
-                self,
-                "Błąd aktualizacji",
-                f"Wystąpił błąd podczas aktualizacji interfejsu: {str(e)}\n\n{traceback.format_exc()}"
-            )
+            if self.current_data is None:
+                print("Brak danych do aktualizacji tabs")
+                return
+
+            print("Aktualizuję wszystkie zakładki...")
+
+            # aktualizujemy każdą zakładkę - POPRAWIONA METODA
+            self.data_preview_tab.update_data(self.current_data)
+            self.stats_tab.update_data(self.current_data)
+            self.correlation_tab.update_data(self.current_data)
+            self.visualization_tab.update_data(self.current_data)
+            self.data_processing_tab.update_data(self.current_data)
+            self.classification_tab.update_data(self.current_data)
+
+            print("wszystkie taby zaktualizowane!")
+
+        except Exception as error:
+            print(f"blad przy aktualizacji tabow: {error}")
+            QMessageBox.critical(self, "Błąd aktualizacji", f"Wystąpił błąd: {str(error)}")
+
+    def get_current_data(self):
+        """
+        Zwraca aktualne dane - pomocnicza funkcja dla tabow
+        """
+        return self.current_data
+
+    def set_current_data(self, new_data):
+        """
+        Ustawia nowe dane - pomocnicza funkcja dla tabow
+        """
+        self.current_data = new_data
+        # można powiadomić inne taby o zmianie
+        # ale to zrobimy później jak będzie potrzeba
 
     def show_about_dialog(self):
         """Wyświetlanie okna dialogowego 'O programie'."""
@@ -320,7 +331,6 @@ class MainWindow(QMainWindow):
             self,
             "O programie",
             "Aplikacja do analizy danych o jakości powietrza\n\n"
-            "Projekt hurtowni danych\n\n"
             "Funkcjonalności:\n"
             "- Odczyt danych z pliku CSV\n"
             "- Obliczanie miar statystycznych\n"
@@ -334,5 +344,6 @@ class MainWindow(QMainWindow):
             "- Tworzenie wykresów dla danych\n"
             "- Klasyfikacja danych\n"
             "- Grupowanie danych\n"
-            "- Reguły asocjacyjne"
+            "- Reguły asocjacyjne\n\n"
+            "Wersja 2.0 - Podejście funkcyjne"
         )

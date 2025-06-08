@@ -1,0 +1,40 @@
+airQuiality/
+├── __pycache__/
+├── data/
+│   └── AirQualityUCI.csv
+├── gui/
+│   ├── __pycache__/
+│   │   ├── __init__.cpython-311.pyc
+│   │   ├── main_window.cpython-311.pyc
+│   │   └── matplotlib_canvas.cpython-311.pyc
+│   ├── tabs/
+│   │   ├── __pycache__/
+│   │   │   ├── __init__.cpython-311.pyc
+│   │   │   ├── classification_tab.cpython-311.pyc
+│   │   │   ├── correlation_tab.cpython-311.pyc
+│   │   │   ├── data_previews.cpython-311.pyc
+│   │   │   ├── data_processing_tab.cpython-311.pyc
+│   │   │   ├── stats_tab.cpython-311.pyc
+│   │   │   └── visualization_tab.cpython-311.pyc
+│   │   ├── __init__.py
+│   │   ├── classification_tab.py
+│   │   ├── correlation_tab.py
+│   │   ├── data_previews.py
+│   │   ├── data_processing_tab.py
+│   │   ├── stats_tab.py
+│   │   └── visualization_tab.py
+│   ├── __init__.py
+│   ├── main_window.py
+│   └── matplotlib_canvas.py
+├── utils/
+│   ├── __pycache__/
+│   │   ├── data_loader.cpython-311.pyc
+│   │   ├── data_processor.cpython-311.pyc
+│   │   └── visualization.cpython-311.pyc
+│   ├── data_loader.py
+│   ├── data_processor.py
+│   └── visualization.py
+├── main.py
+├── readme.md
+├── requirements.txt
+└── structure.txt
